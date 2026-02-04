@@ -1,0 +1,36 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Breathe Audio Elevate 6.6",
+        "description": "Set up your Breathe Audio Elevate 6.6 multi-zone amplifier.",
+        "data": {
+          "serial_port": "Serial Port",
+          "name": "Device Name",
+          "zones": "Number of Zones",
+          "polling_interval": "Polling Interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "invalid_serial_port": "Invalid serial port",
+      "cannot_connect": "Failed to connect, please check the serial port",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Breathe Audio Options",
+        "description": "Configure Breathe Audio settings.",
+        "data": {
+          "zones": "Number of Zones",
+          "polling_interval": "Polling Interval (seconds)"
+        }
+      }
+    }
+  }
+}
