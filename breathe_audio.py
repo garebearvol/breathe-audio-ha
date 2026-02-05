@@ -110,8 +110,8 @@ class BreatheAudioAPI:
                 self._serial_port,
                 baudrate=BAUDRATE,
                 bytesize=BYTESIZE,
-                parity=getattr(serial, f"PARITY_{PARITY}"),
-                stopbits=getattr(serial, f"STOPBITS_{STOPBITS}"),
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
                 timeout=TIMEOUT,
             )
             self._connected = True
