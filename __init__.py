@@ -186,6 +186,17 @@ class BreatheAudioData:
 
     async def _async_poll(self) -> None:
         """Poll all zones for status."""
+        # Ensure we are connected
+        if not self.api.connected:
+            _LOGGER.debug("Serial connection lost, attempting to reconnect...")
+            try:
+                if not await self.api.connect():
+                    _LOGGER.warning("Failed to reconnect to serial port")
+                    return
+            except Exception as err:
+                _LOGGER.error("Error during reconnection: %s", err)
+                return
+
         for zone in range(1, self.zones + 1):
             try:
                 state = await self.api.query_zone_status(zone)
@@ -198,6 +209,12 @@ class BreatheAudioData:
 
     async def async_refresh_zone(self, zone: int) -> None:
         """Refresh a single zone."""
+        # Ensure we are connected
+        if not self.api.connected:
+            if not await self.api.connect():
+                _LOGGER.warning("Failed to reconnect to serial port")
+                return
+
         try:
             state = await self.api.query_zone_status(zone)
             if state:
