@@ -322,47 +322,23 @@ class BreatheAudioAPI:
         """Query full status of a zone."""
         if not MIN_ZONE <= zone <= MAX_ZONE:
             return None
-        response = await self._send_command(f"Z{zone:02d}QST")
+        response = await self._send_command(f"Z{zone:02d}CONSR")
         if response:
             return self._parse_response(response)
         return None
 
     async def query_power(self, zone: int) -> Optional[bool]:
         """Query zone power state."""
-        if not MIN_ZONE <= zone <= MAX_ZONE:
-            return None
-        response = await self._send_command(f"Z{zone:02d}QPW")
-        if response:
-            state = self._parse_response(response)
-            return state.get("power") if state else None
-        return None
+        return (await self.query_zone_status(zone) or {}).get("power")
 
     async def query_volume(self, zone: int) -> Optional[int]:
         """Query zone volume."""
-        if not MIN_ZONE <= zone <= MAX_ZONE:
-            return None
-        response = await self._send_command(f"Z{zone:02d}QVL")
-        if response:
-            state = self._parse_response(response)
-            return state.get("volume") if state else None
-        return None
+        return (await self.query_zone_status(zone) or {}).get("volume")
 
     async def query_mute(self, zone: int) -> Optional[bool]:
         """Query zone mute state."""
-        if not MIN_ZONE <= zone <= MAX_ZONE:
-            return None
-        response = await self._send_command(f"Z{zone:02d}QMT")
-        if response:
-            state = self._parse_response(response)
-            return state.get("mute") if state else None
-        return None
+        return (await self.query_zone_status(zone) or {}).get("mute")
 
     async def query_source(self, zone: int) -> Optional[int]:
         """Query zone source."""
-        if not MIN_ZONE <= zone <= MAX_ZONE:
-            return None
-        response = await self._send_command(f"Z{zone:02d}QSR")
-        if response:
-            state = self._parse_response(response)
-            return state.get("source") if state else None
-        return None
+        return (await self.query_zone_status(zone) or {}).get("source")
