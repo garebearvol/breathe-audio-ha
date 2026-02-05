@@ -6,6 +6,7 @@ DOMAIN: Final = "breathe_audio"
 
 # Configuration keys
 CONF_SERIAL_PORT: Final = "serial_port"
+DEFAULT_SERIAL_PORT: Final = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02QFFJ-if00-port0"
 CONF_ZONES: Final = "zones"
 CONF_POLLING_INTERVAL: Final = "polling_interval"
 

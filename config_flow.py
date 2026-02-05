@@ -21,6 +21,7 @@ from homeassistant.helpers.selector import (
 from .const import (
     CONF_POLLING_INTERVAL,
     CONF_SERIAL_PORT,
+    DEFAULT_SERIAL_PORT,
     CONF_ZONES,
     DEFAULT_NAME,
     DEFAULT_POLLING_INTERVAL,
@@ -36,6 +37,10 @@ _LOGGER = logging.getLogger(__name__)
 def validate_serial_port(port: str) -> bool:
     """Validate serial port exists."""
     try:
+        # Always allow the default hardcoded port
+        if port == DEFAULT_SERIAL_PORT:
+            return True
+
         # On Linux/Mac, check if port exists
         if port.startswith("/dev/"):
             return os.path.exists(port)
@@ -54,13 +59,17 @@ def get_serial_port_options() -> list[str]:
     """Get list of potential serial ports."""
     ports = []
     
+    # Always include the default port first
+    ports.append(DEFAULT_SERIAL_PORT)
+
     # Check for Linux /dev/serial/by-id/ paths (most reliable for USB adapters)
     by_id_path = "/dev/serial/by-id"
     if os.path.isdir(by_id_path):
         try:
             for entry in sorted(os.listdir(by_id_path)):
                 full_path = os.path.join(by_id_path, entry)
-                ports.append(full_path)
+                if full_path != DEFAULT_SERIAL_PORT:
+                    ports.append(full_path)
         except (OSError, PermissionError):
             pass
     
@@ -70,17 +79,17 @@ def get_serial_port_options() -> list[str]:
             for entry in os.listdir("/dev"):
                 # Common serial port patterns
                 if entry.startswith("ttyUSB") or entry.startswith("ttyACM"):
-                    ports.append(f"/dev/{entry}")
+                    path = f"/dev/{entry}"
+                    if path != DEFAULT_SERIAL_PORT:
+                        ports.append(path)
                 elif entry.startswith("tty.SLAB") or entry.startswith("tty.wch"):
-                    ports.append(f"/dev/{entry}")
+                    path = f"/dev/{entry}"
+                    if path != DEFAULT_SERIAL_PORT:
+                        ports.append(path)
         except (OSError, PermissionError):
             pass
     
-    # Check for Windows COM ports (common range)
-    for i in range(1, 33):
-        ports.append(f"COM{i}")
-    
-    return sorted(set(ports))
+    return sorted(list(set(ports)))
 
 
 class BreatheAudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -105,7 +114,13 @@ class BreatheAudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(serial_port)
                 self._abort_if_unique_id_configured()
 
-                # Test connection
+                # Test connection (skip for default port to allow forcing it)
+                if serial_port == DEFAULT_SERIAL_PORT:
+                     return self.async_create_entry(
+                        title=user_input.get(CONF_NAME, DEFAULT_NAME),
+                        data=user_input,
+                    )
+
                 try:
                     if await self._test_connection(serial_port):
                         return self.async_create_entry(
@@ -121,17 +136,20 @@ class BreatheAudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "unknown"
 
         # Get detected serial ports for the dropdown
-        # Using custom_value=True allows users to type any path, including
-        # specific by-id paths like /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02QFFJ-if00-port0
         port_options = get_serial_port_options()
         
+        # Ensure default is pre-selected
+        default_port = DEFAULT_SERIAL_PORT
+        if port_options and default_port not in port_options:
+             port_options.insert(0, default_port)
+
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_SERIAL_PORT): SelectSelector(
+                vol.Required(CONF_SERIAL_PORT, default=default_port): SelectSelector(
                     SelectSelectorConfig(
                         options=port_options,
                         mode=SelectSelectorMode.DROPDOWN,
-                        custom_value=True,  # Allow manual entry of any path
+                        custom_value=True,
                         sort=True,
                     )
                 ),
