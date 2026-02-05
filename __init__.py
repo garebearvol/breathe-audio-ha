@@ -9,6 +9,7 @@ from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.event import async_call_later
 
 from .breathe_audio import BreatheAudioAPI
 from .const import (
@@ -174,8 +175,8 @@ class BreatheAudioData:
 
     def _schedule_polling(self) -> None:
         """Schedule the next poll."""
-        self._cancel_polling = self.hass.helpers.event.async_call_later(
-            self.polling_interval, self._async_poll_callback
+        self._cancel_polling = async_call_later(
+            self.hass, self.polling_interval, self._async_poll_callback
         )
 
     async def _async_poll_callback(self, _now=None) -> None:
