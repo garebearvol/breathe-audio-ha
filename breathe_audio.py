@@ -248,8 +248,14 @@ class BreatheAudioAPI:
 
     async def _send_command(self, command: str, expect_response: bool = True) -> Optional[str]:
         """Send a command and optionally wait for response."""
-        if not self._protocol or not self._connected:
-            _LOGGER.error("Cannot send command: not connected")
+        # Auto-reconnect if needed
+        if not self.connected:
+            _LOGGER.debug("Not connected, attempting to reconnect...")
+            if not await self.connect():
+                _LOGGER.error("Cannot send command: not connected")
+                return None
+
+        if not self._protocol:
             return None
 
         async with self._lock:
