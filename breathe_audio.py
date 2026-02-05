@@ -44,17 +44,32 @@ class BreatheAudioProtocol(asyncio.Protocol):
     def data_received(self, data: bytes) -> None:
         """Handle incoming data from serial port."""
         try:
-            decoded = data.decode("ascii")
+            # Decode and strip NULL bytes/garbage
+            decoded = data.decode("ascii", errors="ignore")
             self._buffer += decoded
             
             # Process complete messages (terminated by CR)
             while COMMAND_TERMINATOR in self._buffer:
                 message, self._buffer = self._buffer.split(COMMAND_TERMINATOR, 1)
-                if message:
+                
+                # Cleanup message
+                message = message.strip()
+                
+                # Handle double hash or split messages
+                if "##" in message:
+                    message = message.replace("##", "#")
+                
+                # Only process if it looks like a valid response or part of one
+                # Usually starts with # or contains zone data like Z01...
+                if message and (message.startswith(RESPONSE_PREFIX) or "PWR" in message):
+                    # Fix partial messages if they lost the # prefix
+                    if not message.startswith(RESPONSE_PREFIX) and message.startswith("Z"):
+                        message = f"{RESPONSE_PREFIX}{message}"
+                        
                     _LOGGER.debug("Received message: %s", message)
                     self._message_callback(message)
-        except UnicodeDecodeError as err:
-            _LOGGER.error("Failed to decode serial data: %s", err)
+        except Exception as err:
+            _LOGGER.error("Error processing serial data: %s", err)
 
     def connection_lost(self, exc: Optional[Exception]) -> None:
         """Handle connection lost."""
