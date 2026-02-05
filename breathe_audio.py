@@ -173,55 +173,73 @@ class BreatheAudioAPI:
     def _parse_response(self, message: str) -> Optional[Dict[str, Any]]:
         """Parse a response message into a state dictionary."""
         # Format: #ZxxCMD... (where xx is zone 01-12)
+        # Example: #Z01PWRON,SRC1,GRP0,VOL-62,POFF
         if len(message) < 5 or not message.startswith(RESPONSE_PREFIX):
             return None
 
         try:
             zone = int(message[2:4])
-            cmd = message[4:]
+            cmd = message[4:].upper()  # Normalize to uppercase
             state: Dict[str, Any] = {"zone": zone}
 
-            # Parse different response types
-            if cmd.startswith("PWR"):
+            # Parse composite status string (contains commas)
+            if "," in cmd:
+                parts = cmd.split(",")
+                for part in parts:
+                    if part.startswith("PWR"):
+                        state["power"] = part[3:] == "ON"
+                    elif part.startswith("VOL"):
+                        # Handle VOL-xx or VOLxx
+                        vol_str = part[3:]
+                        if vol_str.startswith("-"):
+                            vol_str = vol_str[1:] # Strip negative sign
+                        try:
+                            state["volume"] = int(vol_str)
+                        except ValueError:
+                            pass # Skip if MT or XM
+                    elif part.startswith("MUT"):
+                        state["mute"] = part[3:] == "ON"
+                    elif part.startswith("SRC"):
+                        try:
+                            state["source"] = int(part[3:])
+                        except ValueError:
+                            pass
+                    elif part.startswith("GRP"):
+                        # Group logic if needed
+                        pass
+            # Parse single command responses
+            elif cmd.startswith("PWR"):
                 state["power"] = cmd[3:] == "ON"
             elif cmd.startswith("VOL"):
-                state["volume"] = int(cmd[3:])
+                vol_str = cmd[3:]
+                if vol_str.startswith("-"):
+                    vol_str = vol_str[1:]
+                try:
+                    state["volume"] = int(vol_str)
+                except ValueError:
+                    pass
             elif cmd.startswith("MUT"):
                 state["mute"] = cmd[3:] == "ON"
             elif cmd.startswith("SRC"):
-                state["source"] = int(cmd[3:])
+                try:
+                    state["source"] = int(cmd[3:])
+                except ValueError:
+                    pass
             elif cmd.startswith("BAS"):
-                state["bass"] = int(cmd[3:])
+                try:
+                    state["bass"] = int(cmd[3:])
+                except ValueError:
+                    pass
             elif cmd.startswith("TRE"):
-                state["treble"] = int(cmd[3:])
+                try:
+                    state["treble"] = int(cmd[3:])
+                except ValueError:
+                    pass
             elif cmd.startswith("BAL"):
-                state["balance"] = int(cmd[3:])
-            elif cmd == "PWRON":
-                state["power"] = True
-            elif cmd == "PWROFF":
-                state["power"] = False
-            elif cmd == "MUTON":
-                state["mute"] = True
-            elif cmd == "MUTOFF":
-                state["mute"] = False
-            elif cmd.startswith("Z"):  # Full zone status
-                # Format: #ZxxPWROnVolxxMutOffSrcxBasxxTrexxBalxx
-                state["power"] = "PWRON" in cmd or "PWROn" in cmd
-                state["mute"] = "MUTON" in cmd or "MutOn" in cmd
-                # Extract other values with basic parsing
-                if "Vol" in cmd:
-                    try:
-                        vol_start = cmd.find("Vol") + 3
-                        vol_str = cmd[vol_start:vol_start + 2]
-                        state["volume"] = int(vol_str)
-                    except (ValueError, IndexError):
-                        pass
-                if "Src" in cmd:
-                    try:
-                        src_start = cmd.find("Src") + 3
-                        state["source"] = int(cmd[src_start:src_start + 1])
-                    except (ValueError, IndexError):
-                        pass
+                try:
+                    state["balance"] = int(cmd[3:])
+                except ValueError:
+                    pass
 
             return state
         except (ValueError, IndexError) as err:
