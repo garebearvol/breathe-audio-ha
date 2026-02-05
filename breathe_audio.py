@@ -241,56 +241,56 @@ class BreatheAudioAPI:
         """Turn zone power on."""
         if not MIN_ZONE <= zone <= MAX_ZONE:
             return False
-        response = await self._send_command(f"Z{zone:02d}PWRON")
+        response = await self._send_command(f"Z{zone:02d}on")
         return response is not None
 
     async def zone_power_off(self, zone: int) -> bool:
         """Turn zone power off."""
         if not MIN_ZONE <= zone <= MAX_ZONE:
             return False
-        response = await self._send_command(f"Z{zone:02d}PWROFF")
+        response = await self._send_command(f"Z{zone:02d}off")
         return response is not None
 
     async def set_volume(self, zone: int, volume: int) -> bool:
         """Set zone volume (0-100)."""
         if not MIN_ZONE <= zone <= MAX_ZONE or not 0 <= volume <= 100:
             return False
-        response = await self._send_command(f"Z{zone:02d}VOL{volume:02d}")
+        response = await self._send_command(f"Z{zone:02d}vol{volume:02d}")
         return response is not None
 
     async def volume_up(self, zone: int) -> bool:
         """Increase zone volume."""
         if not MIN_ZONE <= zone <= MAX_ZONE:
             return False
-        response = await self._send_command(f"Z{zone:02d}VOL+")
+        response = await self._send_command(f"Z{zone:02d}vol+")
         return response is not None
 
     async def volume_down(self, zone: int) -> bool:
         """Decrease zone volume."""
         if not MIN_ZONE <= zone <= MAX_ZONE:
             return False
-        response = await self._send_command(f"Z{zone:02d}VOL-")
+        response = await self._send_command(f"Z{zone:02d}vol-")
         return response is not None
 
     async def mute_on(self, zone: int) -> bool:
         """Mute zone."""
         if not MIN_ZONE <= zone <= MAX_ZONE:
             return False
-        response = await self._send_command(f"Z{zone:02d}MUTON")
+        response = await self._send_command(f"Z{zone:02d}mton")
         return response is not None
 
     async def mute_off(self, zone: int) -> bool:
         """Unmute zone."""
         if not MIN_ZONE <= zone <= MAX_ZONE:
             return False
-        response = await self._send_command(f"Z{zone:02d}MUTOFF")
+        response = await self._send_command(f"Z{zone:02d}mtoff")
         return response is not None
 
     async def set_source(self, zone: int, source: int) -> bool:
         """Set zone source (1-6)."""
         if not MIN_ZONE <= zone <= MAX_ZONE or not 1 <= source <= 6:
             return False
-        response = await self._send_command(f"Z{zone:02d}SRC{source}")
+        response = await self._send_command(f"Z{zone:02d}src{source}")
         return response is not None
 
     async def set_bass(self, zone: int, level: int) -> bool:
@@ -298,7 +298,7 @@ class BreatheAudioAPI:
         if not MIN_ZONE <= zone <= MAX_ZONE or not -10 <= level <= 10:
             return False
         sign = "+" if level >= 0 else ""
-        response = await self._send_command(f"Z{zone:02d}BAS{sign}{level:02d}")
+        response = await self._send_command(f"Z{zone:02d}bas{sign}{level:02d}")
         return response is not None
 
     async def set_treble(self, zone: int, level: int) -> bool:
@@ -306,7 +306,7 @@ class BreatheAudioAPI:
         if not MIN_ZONE <= zone <= MAX_ZONE or not -10 <= level <= 10:
             return False
         sign = "+" if level >= 0 else ""
-        response = await self._send_command(f"Z{zone:02d}TRE{sign}{level:02d}")
+        response = await self._send_command(f"Z{zone:02d}tre{sign}{level:02d}")
         return response is not None
 
     async def set_balance(self, zone: int, level: int) -> bool:
@@ -314,7 +314,7 @@ class BreatheAudioAPI:
         if not MIN_ZONE <= zone <= MAX_ZONE or not -10 <= level <= 10:
             return False
         sign = "+" if level >= 0 else ""
-        response = await self._send_command(f"Z{zone:02d}BAL{sign}{level:02d}")
+        response = await self._send_command(f"Z{zone:02d}bal{sign}{level:02d}")
         return response is not None
 
     # Query commands
