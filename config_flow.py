@@ -1,6 +1,7 @@
 """Config flow for Breathe Audio Elevate 6.6 integration."""
 
 import logging
+import os
 import re
 from typing import Any, Dict, Optional
 
@@ -11,6 +12,11 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .const import (
     CONF_POLLING_INTERVAL,
@@ -32,7 +38,6 @@ def validate_serial_port(port: str) -> bool:
     try:
         # On Linux/Mac, check if port exists
         if port.startswith("/dev/"):
-            import os
             return os.path.exists(port)
         # On Windows, basic COM port validation
         if re.match(r"^COM\d+$", port, re.IGNORECASE):
@@ -43,6 +48,39 @@ def validate_serial_port(port: str) -> bool:
         return False
     except Exception:
         return False
+
+
+def get_serial_port_options() -> list[str]:
+    """Get list of potential serial ports."""
+    ports = []
+    
+    # Check for Linux /dev/serial/by-id/ paths (most reliable for USB adapters)
+    by_id_path = "/dev/serial/by-id"
+    if os.path.isdir(by_id_path):
+        try:
+            for entry in sorted(os.listdir(by_id_path)):
+                full_path = os.path.join(by_id_path, entry)
+                ports.append(full_path)
+        except (OSError, PermissionError):
+            pass
+    
+    # Check for standard Linux/Mac serial ports
+    if os.path.isdir("/dev"):
+        try:
+            for entry in os.listdir("/dev"):
+                # Common serial port patterns
+                if entry.startswith("ttyUSB") or entry.startswith("ttyACM"):
+                    ports.append(f"/dev/{entry}")
+                elif entry.startswith("tty.SLAB") or entry.startswith("tty.wch"):
+                    ports.append(f"/dev/{entry}")
+        except (OSError, PermissionError):
+            pass
+    
+    # Check for Windows COM ports (common range)
+    for i in range(1, 33):
+        ports.append(f"COM{i}")
+    
+    return sorted(set(ports))
 
 
 class BreatheAudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -82,9 +120,21 @@ class BreatheAudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.exception("Unexpected error: %s", err)
                     errors["base"] = "unknown"
 
+        # Get detected serial ports for the dropdown
+        # Using custom_value=True allows users to type any path, including
+        # specific by-id paths like /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02QFFJ-if00-port0
+        port_options = get_serial_port_options()
+        
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_SERIAL_PORT): str,
+                vol.Required(CONF_SERIAL_PORT): SelectSelector(
+                    SelectSelectorConfig(
+                        options=port_options,
+                        mode=SelectSelectorMode.DROPDOWN,
+                        custom_value=True,  # Allow manual entry of any path
+                        sort=True,
+                    )
+                ),
                 vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
                 vol.Optional(CONF_ZONES, default=DEFAULT_ZONES): vol.All(
                     vol.Coerce(int), vol.Range(min=MIN_ZONE, max=MAX_ZONE)

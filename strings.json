@@ -3,7 +3,10 @@
     "step": {
       "user": {
         "title": "Breathe Audio Elevate 6.6",
-        "description": "Set up your Breathe Audio Elevate 6.6 multi-zone amplifier.",
+        "description": "Set up your Breathe Audio Elevate 6.6 multi-zone amplifier.\n\nFor the Serial Port, select from the list or type a custom path (e.g., /dev/serial/by-id/...).",
+        "data_description": {
+          "serial_port": "Select from detected ports or type a custom path (e.g., /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG02QFFJ-if00-port0)"
+        },
         "data": {
           "serial_port": "Serial Port",
           "name": "Device Name",
