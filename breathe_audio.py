@@ -90,6 +90,7 @@ class BreatheAudioAPI:
         self._lock = asyncio.Lock()
         self._state_callbacks: Dict[int, Callable[[Dict[str, Any]], None]] = {}
         self._connected = False
+        self._last_commanded_zone: Optional[int] = None  # Track last zone for truncated responses
 
     @property
     def connected(self) -> bool:
@@ -142,9 +143,15 @@ class BreatheAudioAPI:
         """Process incoming message."""
         try:
             state = self._parse_response(message)
-            if state and "zone" in state:
-                zone = state["zone"]
-                if zone in self._state_callbacks:
+            if state:
+                zone = state.get("zone")
+                # If zone is missing from response but we have power info, use last commanded zone
+                if zone is None and "power" in state and self._last_commanded_zone is not None:
+                    zone = self._last_commanded_zone
+                    state["zone"] = zone
+                    _LOGGER.debug("Using last commanded zone %d for response without zone ID", zone)
+                
+                if zone is not None and zone in self._state_callbacks:
                     self._state_callbacks[zone](state)
         except Exception as err:
             _LOGGER.error("Error parsing response: %s", err)
@@ -225,7 +232,7 @@ class BreatheAudioAPI:
             _LOGGER.error("Failed to parse message '%s': %s", message, err)
             return None
 
-    async def _send_command(self, command: str) -> None:
+    async def _send_command(self, command: str, zone: Optional[int] = None) -> None:
         """Send a command (fire and forget - no waiting)."""
         if not self.connected:
             _LOGGER.debug("Not connected, attempting to reconnect...")
@@ -237,6 +244,10 @@ class BreatheAudioAPI:
             return
 
         async with self._lock:
+            # Track the zone for this command (used when response lacks zone ID)
+            if zone is not None:
+                self._last_commanded_zone = zone
+                
             full_command = f"{COMMAND_PREFIX}{command}{COMMAND_TERMINATOR}"
             _LOGGER.debug("Sending command: %s", full_command.strip())
             try:
@@ -249,60 +260,60 @@ class BreatheAudioAPI:
     async def zone_power_on(self, zone: int) -> None:
         """Turn zone power on."""
         if MIN_ZONE <= zone <= MAX_ZONE:
-            await self._send_command(f"Z{zone:02d}on")
+            await self._send_command(f"Z{zone:02d}on", zone=zone)
 
     async def zone_power_off(self, zone: int) -> None:
         """Turn zone power off."""
         if MIN_ZONE <= zone <= MAX_ZONE:
-            await self._send_command(f"Z{zone:02d}off")
+            await self._send_command(f"Z{zone:02d}off", zone=zone)
 
     async def set_volume(self, zone: int, volume: int) -> None:
         """Set zone volume (0-100)."""
         if MIN_ZONE <= zone <= MAX_ZONE and 0 <= volume <= 100:
-            await self._send_command(f"Z{zone:02d}vol{volume:02d}")
+            await self._send_command(f"Z{zone:02d}vol{volume:02d}", zone=zone)
 
     async def volume_up(self, zone: int) -> None:
         """Increase zone volume."""
         if MIN_ZONE <= zone <= MAX_ZONE:
-            await self._send_command(f"Z{zone:02d}vol+")
+            await self._send_command(f"Z{zone:02d}vol+", zone=zone)
 
     async def volume_down(self, zone: int) -> None:
         """Decrease zone volume."""
         if MIN_ZONE <= zone <= MAX_ZONE:
-            await self._send_command(f"Z{zone:02d}vol-")
+            await self._send_command(f"Z{zone:02d}vol-", zone=zone)
 
     async def mute_on(self, zone: int) -> None:
         """Mute zone."""
         if MIN_ZONE <= zone <= MAX_ZONE:
-            await self._send_command(f"Z{zone:02d}mton")
+            await self._send_command(f"Z{zone:02d}mton", zone=zone)
 
     async def mute_off(self, zone: int) -> None:
         """Unmute zone."""
         if MIN_ZONE <= zone <= MAX_ZONE:
-            await self._send_command(f"Z{zone:02d}mtoff")
+            await self._send_command(f"Z{zone:02d}mtoff", zone=zone)
 
     async def set_source(self, zone: int, source: int) -> None:
         """Set zone source (1-6)."""
         if MIN_ZONE <= zone <= MAX_ZONE and 1 <= source <= 6:
-            await self._send_command(f"Z{zone:02d}src{source}")
+            await self._send_command(f"Z{zone:02d}src{source}", zone=zone)
 
     async def set_bass(self, zone: int, level: int) -> None:
         """Set zone bass level (-10 to 10)."""
         if MIN_ZONE <= zone <= MAX_ZONE and -10 <= level <= 10:
             sign = "+" if level >= 0 else ""
-            await self._send_command(f"Z{zone:02d}bas{sign}{level:02d}")
+            await self._send_command(f"Z{zone:02d}bas{sign}{level:02d}", zone=zone)
 
     async def set_treble(self, zone: int, level: int) -> None:
         """Set zone treble level (-10 to 10)."""
         if MIN_ZONE <= zone <= MAX_ZONE and -10 <= level <= 10:
             sign = "+" if level >= 0 else ""
-            await self._send_command(f"Z{zone:02d}tre{sign}{level:02d}")
+            await self._send_command(f"Z{zone:02d}tre{sign}{level:02d}", zone=zone)
 
     async def set_balance(self, zone: int, level: int) -> None:
         """Set zone balance (-10 to 10)."""
         if MIN_ZONE <= zone <= MAX_ZONE and -10 <= level <= 10:
             sign = "+" if level >= 0 else ""
-            await self._send_command(f"Z{zone:02d}bal{sign}{level:02d}")
+            await self._send_command(f"Z{zone:02d}bal{sign}{level:02d}", zone=zone)
 
     # Query commands - These still wait (used by polling)
     async def query_zone_status(self, zone: int) -> Optional[Dict[str, Any]]:
