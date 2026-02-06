@@ -129,9 +129,6 @@ class BreatheAudioAPI:
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
                 timeout=TIMEOUT,
-                rtscts=False,
-                xonxoff=False,
-                dsrdtr=False,
             )
             self._connected = True
             _LOGGER.info("Connected to Breathe Audio at %s", self._serial_port)
@@ -287,12 +284,10 @@ class BreatheAudioAPI:
 
             if expect_response:
                 try:
-                    await asyncio.wait_for(self._response_event.wait(), timeout=2.0)
+                    await asyncio.wait_for(self._response_event.wait(), timeout=5.0)
                     return self._last_response
                 except asyncio.TimeoutError:
-                    _LOGGER.warning("Timeout waiting for response to %s - Resetting connection", command)
-                    # Force disconnect so next attempt reconnects
-                    await self.disconnect()
+                    _LOGGER.warning("Timeout waiting for response to %s", command)
                     return None
             return None
 
