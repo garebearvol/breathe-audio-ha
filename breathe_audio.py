@@ -282,6 +282,10 @@ class BreatheAudioAPI:
                 _LOGGER.error("Protocol lost before write")
                 return None
 
+            # Clear software buffer to remove stale data from previous timeouts
+            if self._protocol:
+                self._protocol._buffer = ""
+
             full_command = f"{COMMAND_PREFIX}{command}{COMMAND_TERMINATOR}"
             _LOGGER.debug("Sending command: %s", full_command.strip())
             

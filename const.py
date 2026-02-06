@@ -12,7 +12,7 @@ CONF_POLLING_INTERVAL: Final = "polling_interval"
 
 # Default values
 DEFAULT_NAME: Final = "Breathe Audio Elevate 6.6"
-DEFAULT_POLLING_INTERVAL: Final = 30  # seconds
+DEFAULT_POLLING_INTERVAL: Final = 60  # seconds
 DEFAULT_ZONES: Final = 12
 
 # Serial connection settings

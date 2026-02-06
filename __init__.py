@@ -201,9 +201,14 @@ class BreatheAudioData:
             try:
                 state = await self.api.query_zone_status(zone)
                 if state:
-                    self._zone_data[zone] = state
-                    self._notify_listeners(zone)
-                await asyncio.sleep(0.1)  # Small delay between queries
+                    # Validate we got the correct zone
+                    if state.get("zone") == zone:
+                        self._zone_data[zone] = state
+                        self._notify_listeners(zone)
+                    else:
+                        _LOGGER.warning("Ignored mismatch response: Asked for Zone %d, got Zone %d", zone, state.get("zone"))
+                
+                await asyncio.sleep(1.0)  # 1.0s delay to prevent serial congestion
             except Exception as err:
                 _LOGGER.error("Error polling zone %d: %s", zone, err)
 
