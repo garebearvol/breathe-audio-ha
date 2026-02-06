@@ -186,10 +186,14 @@ class BreatheAudioZone(MediaPlayerEntity):
         self._state = self._coordinator.get_zone_state(self._zone)
         self.async_write_ha_state()
 
-    # Command methods - Fire and Forget for instant UI response
+    # Command methods - Optimistic UI Updates for instant response
 
     async def async_turn_on(self) -> None:
         """Turn the zone on."""
+        # Optimistic update: Show ON immediately
+        self._state["power"] = True
+        self.async_write_ha_state()
+        
         await self._api.zone_power_on(self._zone)
         # Restore saved volume if available (small delay for amp)
         if self._saved_volume is not None:
@@ -198,6 +202,10 @@ class BreatheAudioZone(MediaPlayerEntity):
 
     async def async_turn_off(self) -> None:
         """Turn the zone off."""
+        # Optimistic update: Show OFF immediately
+        self._state["power"] = False
+        self.async_write_ha_state()
+        
         # Save current volume before turning off
         current_vol = self._state.get("volume")
         if current_vol is not None:
@@ -209,6 +217,11 @@ class BreatheAudioZone(MediaPlayerEntity):
         # Invert: 1.0 -> 0 (-dB), 0.0 -> 78 (-dB)
         vol_int = int(MAX_ATTENUATION - (volume * MAX_ATTENUATION))
         vol_int = max(0, min(MAX_ATTENUATION, vol_int))
+        
+        # Optimistic update
+        self._state["volume"] = vol_int
+        self.async_write_ha_state()
+        
         await self._api.set_volume(self._zone, vol_int)
 
     async def async_volume_up(self) -> None:
@@ -221,6 +234,10 @@ class BreatheAudioZone(MediaPlayerEntity):
 
     async def async_mute_volume(self, mute: bool) -> None:
         """Mute or unmute."""
+        # Optimistic update
+        self._state["mute"] = mute
+        self.async_write_ha_state()
+        
         if mute:
             await self._api.mute_on(self._zone)
         else:
