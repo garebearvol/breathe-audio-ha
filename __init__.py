@@ -203,7 +203,7 @@ class BreatheAudioData:
                 if state:
                     self._zone_data[zone] = state
                     self._notify_listeners(zone)
-                await asyncio.sleep(0.3)  # Increased from 0.1s to 0.3s for stability
+                await asyncio.sleep(0.1)  # Small delay between queries
             except Exception as err:
                 _LOGGER.error("Error polling zone %d: %s", zone, err)
 
