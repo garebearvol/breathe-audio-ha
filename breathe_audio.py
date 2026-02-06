@@ -185,12 +185,20 @@ class BreatheAudioAPI:
         """Parse a response message into a state dictionary."""
         # Format: #ZxxCMD... (where xx is zone 01-12)
         # Example: #Z01PWRON,SRC1,GRP0,VOL-62,POFF
-        if len(message) < 5 or not message.startswith(RESPONSE_PREFIX):
+        
+        # Use regex to find Zone ID safely (handles Z1, Z01, Z10)
+        import re
+        match = re.search(r'Z(\d+)', message)
+        if not match:
             return None
-
+            
         try:
-            zone = int(message[2:4])
-            cmd = message[4:].upper()  # Normalize to uppercase
+            zone = int(match.group(1))
+            
+            # Remove the #Zxx part to get the command body
+            # Find where the match ended
+            cmd_start = match.end()
+            cmd = message[cmd_start:].upper()  # Normalize to uppercase
             state: Dict[str, Any] = {"zone": zone}
 
             # Parse composite status string (contains commas)
