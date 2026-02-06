@@ -259,12 +259,21 @@ class BreatheAudioAPI:
             return None
 
         async with self._lock:
+            if not self._protocol:
+                _LOGGER.error("Protocol lost before write")
+                return None
+
             full_command = f"{COMMAND_PREFIX}{command}{COMMAND_TERMINATOR}"
             _LOGGER.debug("Sending command: %s", full_command.strip())
             
             self._response_event.clear()
             self._last_response = None
-            self._protocol.write(full_command)
+            try:
+                self._protocol.write(full_command)
+            except Exception as err:
+                _LOGGER.error("Failed to write to protocol: %s", err)
+                await self.disconnect()
+                return None
 
             if expect_response:
                 try:
