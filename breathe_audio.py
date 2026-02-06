@@ -64,8 +64,12 @@ class BreatheAudioProtocol(asyncio.Protocol):
                 # Usually starts with # or contains zone data like Z01...
                 if message and (message.startswith(RESPONSE_PREFIX) or "PWR" in message):
                     # Fix partial messages if they lost the # prefix
-                    if not message.startswith(RESPONSE_PREFIX) and message.startswith("Z"):
-                        message = f"{RESPONSE_PREFIX}{message}"
+                    if not message.startswith(RESPONSE_PREFIX):
+                        if message.startswith("Z"):
+                            message = f"{RESPONSE_PREFIX}{message}"
+                        elif message[0].isdigit():
+                            # Handle case where #Z is missing (e.g. "05PWROFF")
+                            message = f"{RESPONSE_PREFIX}Z{message}"
                         
                     _LOGGER.debug("Received message: %s", message)
                     self._message_callback(message)
