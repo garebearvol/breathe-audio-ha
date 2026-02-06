@@ -158,9 +158,8 @@ class BreatheAudioAPI:
 
     def _handle_message(self, message: str) -> None:
         """Process incoming message."""
-        if not message.startswith(RESPONSE_PREFIX):
-            _LOGGER.warning("Unexpected message format: %s", message)
-            return
+        # Allow permissive validation to catch truncated responses
+        # if not message.startswith(RESPONSE_PREFIX): ... (Removed strict check)
 
         # Store response and signal completion
         self._last_response = message
@@ -168,6 +167,8 @@ class BreatheAudioAPI:
 
         # Parse and dispatch to zone callback if registered
         try:
+            # We don't have context here to supply default_zone, so incomplete messages
+            # won't trigger callbacks. This is fine; the poller/command sender handles them.
             state = self._parse_response(message)
             if state and "zone" in state:
                 zone = state["zone"]
@@ -181,7 +182,7 @@ class BreatheAudioAPI:
         self._connected = False
         self._response_event.set()  # Wake up any waiting commands
 
-    def _parse_response(self, message: str) -> Optional[Dict[str, Any]]:
+    def _parse_response(self, message: str, default_zone: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Parse a response message into a state dictionary."""
         # Format: #ZxxCMD... (where xx is zone 01-12)
         # Example: #Z01PWRON,SRC1,GRP0,VOL-62,POFF
@@ -189,81 +190,90 @@ class BreatheAudioAPI:
         # Use regex to find Zone ID safely (handles Z1, Z01, Z10)
         import re
         match = re.search(r'Z(\d+)', message)
-        if not match:
-            return None
-            
-        try:
-            zone = int(match.group(1))
-            
-            # Remove the #Zxx part to get the command body
-            # Find where the match ended
-            cmd_start = match.end()
-            cmd = message[cmd_start:].upper()  # Normalize to uppercase
-            state: Dict[str, Any] = {"zone": zone}
+        
+        zone = None
+        cmd_part = message
+        
+        if match:
+            try:
+                zone = int(match.group(1))
+                cmd_start = match.end()
+                cmd_part = message[cmd_start:]
+            except ValueError:
+                pass
+        
+        # Fallback to default_zone if provided and no zone found in message
+        if zone is None and default_zone is not None:
+            zone = default_zone
+            # Assume whole message is the command if no Zxx found
+            cmd_part = message
 
-            # Parse composite status string (contains commas)
-            if "," in cmd:
-                parts = cmd.split(",")
-                for part in parts:
-                    if part.startswith("PWR"):
-                        state["power"] = part[3:] == "ON"
-                    elif part.startswith("VOL"):
-                        # Handle VOL-xx or VOLxx
-                        vol_str = part[3:]
-                        if vol_str.startswith("-"):
-                            vol_str = vol_str[1:] # Strip negative sign
-                        try:
-                            state["volume"] = int(vol_str)
-                        except ValueError:
-                            pass # Skip if MT or XM
-                    elif part.startswith("MUT"):
-                        state["mute"] = part[3:] == "ON"
-                    elif part.startswith("SRC"):
-                        try:
-                            state["source"] = int(part[3:])
-                        except ValueError:
-                            pass
-                    elif part.startswith("GRP"):
-                        # Group logic if needed
+        if zone is None:
+            return None
+
+        state: Dict[str, Any] = {"zone": zone}
+        cmd = cmd_part.upper()
+
+        # Parse composite status string (contains commas)
+        if "," in cmd:
+            parts = cmd.split(",")
+            for part in parts:
+                if part.startswith("PWR"):
+                    state["power"] = part[3:] == "ON"
+                elif part.startswith("VOL"):
+                    # Handle VOL-xx or VOLxx
+                    vol_str = part[3:]
+                    if vol_str.startswith("-"):
+                        vol_str = vol_str[1:] # Strip negative sign
+                    try:
+                        state["volume"] = int(vol_str)
+                    except ValueError:
+                        pass # Skip if MT or XM
+                elif part.startswith("MUT"):
+                    state["mute"] = part[3:] == "ON"
+                elif part.startswith("SRC"):
+                    try:
+                        state["source"] = int(part[3:])
+                    except ValueError:
                         pass
-            # Parse single command responses
-            elif cmd.startswith("PWR"):
-                state["power"] = cmd[3:] == "ON"
-            elif cmd.startswith("VOL"):
-                vol_str = cmd[3:]
-                if vol_str.startswith("-"):
-                    vol_str = vol_str[1:]
-                try:
-                    state["volume"] = int(vol_str)
-                except ValueError:
+                elif part.startswith("GRP"):
+                    # Group logic if needed
                     pass
-            elif cmd.startswith("MUT"):
-                state["mute"] = cmd[3:] == "ON"
-            elif cmd.startswith("SRC"):
-                try:
-                    state["source"] = int(cmd[3:])
-                except ValueError:
-                    pass
-            elif cmd.startswith("BAS"):
-                try:
-                    state["bass"] = int(cmd[3:])
-                except ValueError:
-                    pass
-            elif cmd.startswith("TRE"):
-                try:
-                    state["treble"] = int(cmd[3:])
-                except ValueError:
-                    pass
-            elif cmd.startswith("BAL"):
-                try:
-                    state["balance"] = int(cmd[3:])
-                except ValueError:
-                    pass
+        # Parse single command responses
+        elif cmd.startswith("PWR"):
+            state["power"] = cmd[3:] == "ON"
+        elif cmd.startswith("VOL"):
+            vol_str = cmd[3:]
+            if vol_str.startswith("-"):
+                vol_str = vol_str[1:]
+            try:
+                state["volume"] = int(vol_str)
+            except ValueError:
+                pass
+        elif cmd.startswith("MUT"):
+            state["mute"] = cmd[3:] == "ON"
+        elif cmd.startswith("SRC"):
+            try:
+                state["source"] = int(cmd[3:])
+            except ValueError:
+                pass
+        elif cmd.startswith("BAS"):
+            try:
+                state["bass"] = int(cmd[3:])
+            except ValueError:
+                pass
+        elif cmd.startswith("TRE"):
+            try:
+                state["treble"] = int(cmd[3:])
+            except ValueError:
+                pass
+        elif cmd.startswith("BAL"):
+            try:
+                state["balance"] = int(cmd[3:])
+            except ValueError:
+                pass
 
-            return state
-        except (ValueError, IndexError) as err:
-            _LOGGER.error("Failed to parse message '%s': %s", message, err)
-            return None
+        return state
 
     async def _send_command(self, command: str, expect_response: bool = True) -> Optional[str]:
         """Send a command and optionally wait for response."""
@@ -282,9 +292,14 @@ class BreatheAudioAPI:
                 _LOGGER.error("Protocol lost before write")
                 return None
 
-            # Clear software buffer to remove stale data from previous timeouts
-            if self._protocol:
-                self._protocol._buffer = ""
+            # Flush hardware and software buffers to ensure fresh response
+            try:
+                if self._protocol:
+                    self._protocol._buffer = ""
+                if self._transport and hasattr(self._transport, "serial"):
+                    self._transport.serial.reset_input_buffer()
+            except Exception as err:
+                _LOGGER.warning("Failed to flush buffers: %s", err)
 
             full_command = f"{COMMAND_PREFIX}{command}{COMMAND_TERMINATOR}"
             _LOGGER.debug("Sending command: %s", full_command.strip())
@@ -395,7 +410,7 @@ class BreatheAudioAPI:
             return None
         response = await self._send_command(f"Z{zone:02d}CONSR")
         if response:
-            return self._parse_response(response)
+            return self._parse_response(response, default_zone=zone)
         return None
 
     async def query_power(self, zone: int) -> Optional[bool]:

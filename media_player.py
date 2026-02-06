@@ -196,7 +196,7 @@ class BreatheAudioZone(MediaPlayerEntity):
                 # Minimal delay to ensure amp is ready for volume command
                 await asyncio.sleep(0.2)
                 await self._api.set_volume(self._zone, self._saved_volume)
-            # Response handling will automatically update state
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_turn_off(self) -> None:
         """Turn the zone off."""
@@ -205,29 +205,35 @@ class BreatheAudioZone(MediaPlayerEntity):
         if current_vol is not None:
             self._saved_volume = current_vol
 
-        await self._api.zone_power_off(self._zone)
+        if await self._api.zone_power_off(self._zone):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_set_volume_level(self, volume: float) -> None:
         """Set volume level (0.0 to 1.0)."""
         # Invert: 1.0 -> 0 (-dB), 0.0 -> 78 (-dB)
         vol_int = int(MAX_ATTENUATION - (volume * MAX_ATTENUATION))
         vol_int = max(0, min(MAX_ATTENUATION, vol_int))
-        await self._api.set_volume(self._zone, vol_int)
+        if await self._api.set_volume(self._zone, vol_int):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_volume_up(self) -> None:
         """Volume up."""
-        await self._api.volume_up(self._zone)
+        if await self._api.volume_up(self._zone):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_volume_down(self) -> None:
         """Volume down."""
-        await self._api.volume_down(self._zone)
+        if await self._api.volume_down(self._zone):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_mute_volume(self, mute: bool) -> None:
         """Mute or unmute."""
         if mute:
-            await self._api.mute_on(self._zone)
+            success = await self._api.mute_on(self._zone)
         else:
-            await self._api.mute_off(self._zone)
+            success = await self._api.mute_off(self._zone)
+        if success:
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_select_source(self, source: str) -> None:
         """Select input source."""
@@ -246,22 +252,25 @@ class BreatheAudioZone(MediaPlayerEntity):
                 except (ValueError, IndexError):
                     pass
 
-        if source_num:
-            await self._api.set_source(self._zone, source_num)
+        if source_num and await self._api.set_source(self._zone, source_num):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     # Service methods for tone controls
 
     async def async_set_bass(self, level: int) -> None:
         """Set bass level (-10 to 10)."""
-        await self._api.set_bass(self._zone, level)
+        if await self._api.set_bass(self._zone, level):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_set_treble(self, level: int) -> None:
         """Set treble level (-10 to 10)."""
-        await self._api.set_treble(self._zone, level)
+        if await self._api.set_treble(self._zone, level):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_set_balance(self, level: int) -> None:
         """Set balance level (-10 to 10)."""
-        await self._api.set_balance(self._zone, level)
+        if await self._api.set_balance(self._zone, level):
+            await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_update(self) -> None:
         """Update the entity state."""
