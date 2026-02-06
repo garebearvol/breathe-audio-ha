@@ -44,6 +44,7 @@ class BreatheAudioProtocol(asyncio.Protocol):
     def data_received(self, data: bytes) -> None:
         """Handle incoming data from serial port."""
         try:
+            _LOGGER.debug("RAW DATA RECEIVED: %s", data)
             # Decode and strip NULL bytes/garbage
             decoded = data.decode("ascii", errors="ignore")
             self._buffer += decoded
@@ -128,9 +129,18 @@ class BreatheAudioAPI:
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
                 timeout=TIMEOUT,
+                rtscts=False,
+                xonxoff=False,
+                dsrdtr=False,
             )
             self._connected = True
             _LOGGER.info("Connected to Breathe Audio at %s", self._serial_port)
+            
+            # Send a wakeup CR to clear any pending command buffer on the device
+            await asyncio.sleep(0.1)
+            self._protocol.write(COMMAND_TERMINATOR)
+            await asyncio.sleep(0.1)
+            
             return True
         except serial.SerialException as err:
             _LOGGER.error("Failed to connect to %s: %s", self._serial_port, err)
