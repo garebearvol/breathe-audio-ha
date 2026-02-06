@@ -194,7 +194,7 @@ class BreatheAudioZone(MediaPlayerEntity):
             # Restore saved volume if available
             if self._saved_volume is not None:
                 # Small delay to ensure amp is ready for volume command
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)
                 await self._api.set_volume(self._zone, self._saved_volume)
             await self._coordinator.async_refresh_zone(self._zone)
 
