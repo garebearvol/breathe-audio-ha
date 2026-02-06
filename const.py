@@ -59,6 +59,7 @@ SOURCES = {
 # Volume limits
 MIN_VOLUME: Final = 0
 MAX_VOLUME: 100
+MAX_ATTENUATION: Final = 78 # 0 to 78 (-dB)
 
 # Tone control limits
 MIN_TONE: Final = -10

@@ -27,6 +27,7 @@ from .const import (
     ATTR_ZONE,
     DOMAIN,
     SOURCES,
+    MAX_ATTENUATION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -122,7 +123,9 @@ class BreatheAudioZone(MediaPlayerEntity):
         """Return the volume level (0.0 to 1.0)."""
         volume = self._state.get("volume")
         if volume is not None:
-            return volume / 100.0
+            # Invert: 0 (-dB) is loud (1.0), 78 (-dB) is quiet (0.0)
+            level = (MAX_ATTENUATION - volume) / MAX_ATTENUATION
+            return max(0.0, min(1.0, level))
         return None
 
     @property
@@ -195,7 +198,9 @@ class BreatheAudioZone(MediaPlayerEntity):
 
     async def async_set_volume_level(self, volume: float) -> None:
         """Set volume level (0.0 to 1.0)."""
-        vol_int = int(volume * 100)
+        # Invert: 1.0 -> 0 (-dB), 0.0 -> 78 (-dB)
+        vol_int = int(MAX_ATTENUATION - (volume * MAX_ATTENUATION))
+        vol_int = max(0, min(MAX_ATTENUATION, vol_int))
         if await self._api.set_volume(self._zone, vol_int):
             await self._coordinator.async_refresh_zone(self._zone)
 
