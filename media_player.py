@@ -1,5 +1,6 @@
 """Media player platform for Breathe Audio Elevate 6.6."""
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -104,6 +105,7 @@ class BreatheAudioZone(MediaPlayerEntity):
 
         # State cache
         self._state: Dict[str, Any] = {}
+        self._saved_volume: Optional[int] = None
 
     @property
     def name(self) -> str:
@@ -189,10 +191,20 @@ class BreatheAudioZone(MediaPlayerEntity):
     async def async_turn_on(self) -> None:
         """Turn the zone on."""
         if await self._api.zone_power_on(self._zone):
+            # Restore saved volume if available
+            if self._saved_volume is not None:
+                # Small delay to ensure amp is ready for volume command
+                await asyncio.sleep(0.5)
+                await self._api.set_volume(self._zone, self._saved_volume)
             await self._coordinator.async_refresh_zone(self._zone)
 
     async def async_turn_off(self) -> None:
         """Turn the zone off."""
+        # Save current volume before turning off
+        current_vol = self._state.get("volume")
+        if current_vol is not None:
+            self._saved_volume = current_vol
+
         if await self._api.zone_power_off(self._zone):
             await self._coordinator.async_refresh_zone(self._zone)
 
