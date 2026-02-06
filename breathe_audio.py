@@ -271,7 +271,9 @@ class BreatheAudioAPI:
                     await asyncio.wait_for(self._response_event.wait(), timeout=2.0)
                     return self._last_response
                 except asyncio.TimeoutError:
-                    _LOGGER.warning("Timeout waiting for response to %s", command)
+                    _LOGGER.warning("Timeout waiting for response to %s - Resetting connection", command)
+                    # Force disconnect so next attempt reconnects
+                    await self.disconnect()
                     return None
             return None
 
