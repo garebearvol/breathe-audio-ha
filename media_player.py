@@ -121,6 +121,11 @@ class BreatheAudioZone(MediaPlayerEntity):
         return MediaPlayerState.OFF
 
     @property
+    def available(self) -> bool:
+        """Return True if the device is available."""
+        return self._coordinator.available
+
+    @property
     def volume_level(self) -> Optional[float]:
         """Return the volume level (0.0 to 1.0)."""
         volume = self._state.get("volume")
