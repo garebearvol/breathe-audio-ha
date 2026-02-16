@@ -144,6 +144,7 @@ class BreatheAudioData:
 
     def _handle_zone_update(self, zone: int, state: Dict[str, Any]) -> None:
         """Handle async zone state update."""
+        _LOGGER.debug("Zone %d update received: %s", zone, state)
         if zone not in self._zone_data:
             self._zone_data[zone] = {}
         self._zone_data[zone].update(state)
@@ -181,7 +182,9 @@ class BreatheAudioData:
         try:
             state = await self.api.query_zone_status(zone)
             if state:
-                self._zone_data[zone] = state
+                if zone not in self._zone_data:
+                    self._zone_data[zone] = {}
+                self._zone_data[zone].update(state)
                 self._notify_listeners(zone)
         except Exception as err:
             _LOGGER.debug("Error refreshing zone %d: %s", zone, err)
