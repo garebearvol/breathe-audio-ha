@@ -228,10 +228,12 @@ class BreatheAudioZone(MediaPlayerEntity, RestoreEntity):
         self.async_write_ha_state()
 
         await self._api.zone_power_on(self._zone)
-        # Restore saved volume if available (small delay for amp)
+        # Restore saved volume (amp needs time to initialize after power-on)
         if self._saved_volume is not None:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(1.0)
             await self._api.set_volume(self._zone, self._saved_volume)
+            self._state["volume"] = self._saved_volume
+            self.async_write_ha_state()
         self._schedule_verify()
 
     async def async_turn_off(self) -> None:
