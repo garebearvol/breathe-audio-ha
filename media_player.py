@@ -15,6 +15,7 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .breathe_audio import BreatheAudioAPI
 from .const import (
@@ -73,7 +74,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class BreatheAudioZone(MediaPlayerEntity):
+class BreatheAudioZone(MediaPlayerEntity, RestoreEntity):
     """Representation of a Breathe Audio zone."""
 
     _attr_device_class = MediaPlayerDeviceClass.RECEIVER
@@ -170,12 +171,27 @@ class BreatheAudioZone(MediaPlayerEntity):
             attrs[ATTR_BALANCE] = self._state["balance"]
         if "party_mode" in self._state:
             attrs[ATTR_PARTY_MODE] = self._state["party_mode"]
+        if self._saved_volume is not None:
+            attrs["saved_volume"] = self._saved_volume
 
         return attrs
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to hass."""
         await super().async_added_to_hass()
+
+        # Restore saved volume from previous session
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.attributes:
+            saved = last_state.attributes.get("saved_volume")
+            if saved is not None:
+                self._saved_volume = int(saved)
+                _LOGGER.debug(
+                    "Zone %d: restored saved volume %d from previous session",
+                    self._zone,
+                    self._saved_volume,
+                )
+
         # Register for state updates
         self._coordinator.register_listener(self._zone, self._handle_update)
         # Get initial state
@@ -190,6 +206,9 @@ class BreatheAudioZone(MediaPlayerEntity):
     def _handle_update(self) -> None:
         """Handle state update from coordinator."""
         self._state = self._coordinator.get_zone_state(self._zone)
+        # Track volume while zone is on so we always have the latest
+        if self._state.get("power") and self._state.get("volume") is not None:
+            self._saved_volume = self._state["volume"]
         self.async_write_ha_state()
 
     # Command methods - Optimistic UI Updates + post-command verification
@@ -234,8 +253,9 @@ class BreatheAudioZone(MediaPlayerEntity):
         vol_int = int(MAX_ATTENUATION - (volume * MAX_ATTENUATION))
         vol_int = max(0, min(MAX_ATTENUATION, vol_int))
 
-        # Optimistic update
+        # Optimistic update + save for restore on next power-on
         self._state["volume"] = vol_int
+        self._saved_volume = vol_int
         self.async_write_ha_state()
 
         await self._api.set_volume(self._zone, vol_int)
