@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from custom_components.breathe_audio.serial_manager import SerialConnectionManager, SerialMessageParser
+from serial_manager import SerialConnectionManager, SerialMessageParser
 
 
 class _FakeProtocol:
@@ -36,6 +36,58 @@ def test_parser_uses_last_zone_for_truncated_power() -> None:
     state = SerialMessageParser.parse_state("PWRON", last_zone=5)
     assert state["zone"] == 5
     assert state["power"] is True
+
+
+def test_parser_handles_vol_negative_format() -> None:
+    state = SerialMessageParser.parse_state("#Z01PWRON,SRC3,GRP0,VOL-45,PMST")
+    assert state["zone"] == 1
+    assert state["power"] is True
+    assert state["source"] == 3
+    assert state["group"] == 0
+    assert state["volume"] == 45
+    assert state["party_mode"] == "MST"
+
+
+def test_parser_handles_vol_muted() -> None:
+    state = SerialMessageParser.parse_state("#Z02PWRON,VOLMT")
+    assert state["zone"] == 2
+    assert state["mute"] is True
+
+
+def test_parser_handles_vol_external_mute() -> None:
+    state = SerialMessageParser.parse_state("#Z05PWRON,VOLXM")
+    assert state["zone"] == 5
+    assert state["external_mute"] is True
+
+
+def test_parser_handles_alloff_broadcast() -> None:
+    state = SerialMessageParser.parse_state("#ALLOFF")
+    assert state == {"broadcast": "alloff"}
+
+
+def test_parser_handles_extmon_broadcast() -> None:
+    state = SerialMessageParser.parse_state("#EXTMON")
+    assert state == {"broadcast": "extmon"}
+
+
+def test_parser_handles_extmoff_broadcast() -> None:
+    state = SerialMessageParser.parse_state("#EXTMOFF")
+    assert state == {"broadcast": "extmoff"}
+
+
+def test_parser_handles_error_response() -> None:
+    state = SerialMessageParser.parse_state("#?")
+    assert state is None
+
+
+def test_parser_handles_party_mode_off() -> None:
+    state = SerialMessageParser.parse_state("#Z03PWRON,POFF")
+    assert state["party_mode"] == "OFF"
+
+
+def test_parser_handles_party_mode_slave() -> None:
+    state = SerialMessageParser.parse_state("#Z04PWRON,PSLV")
+    assert state["party_mode"] == "SLV"
 
 
 @pytest.mark.asyncio

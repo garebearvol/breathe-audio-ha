@@ -1,13 +1,14 @@
 """Library/API wrapper for Breathe Audio Elevate 6.6 RS-232 serial communication."""
 
+import asyncio
 import logging
 from typing import Any, Callable, Dict, Optional, List
 
 try:
-    from .const import COMMAND_PREFIX, MAX_ZONE, MIN_ZONE
+    from .const import COMMAND_PREFIX, INTER_COMMAND_DELAY, MAX_ZONE, MIN_ZONE
     from .serial_manager import SerialConnectionManager
 except ImportError:  # pragma: no cover - standalone script fallback
-    from const import COMMAND_PREFIX, MAX_ZONE, MIN_ZONE  # type: ignore[no-redef]
+    from const import COMMAND_PREFIX, INTER_COMMAND_DELAY, MAX_ZONE, MIN_ZONE  # type: ignore[no-redef]
     from serial_manager import SerialConnectionManager  # type: ignore[no-redef]
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,9 +61,25 @@ class BreatheAudioAPI:
 
     def _handle_state(self, state: Dict[str, Any]) -> None:
         """Process incoming state update."""
+        broadcast = state.get("broadcast")
+        if broadcast:
+            self._handle_broadcast(broadcast)
+            return
         zone = state.get("zone")
         if zone is not None and zone in self._state_callbacks:
             self._state_callbacks[zone](state)
+
+    def _handle_broadcast(self, broadcast: str) -> None:
+        """Handle broadcast responses that affect all zones."""
+        if broadcast == "alloff":
+            for zone, cb in self._state_callbacks.items():
+                cb({"zone": zone, "power": False})
+        elif broadcast == "extmon":
+            for zone, cb in self._state_callbacks.items():
+                cb({"zone": zone, "external_mute": True})
+        elif broadcast == "extmoff":
+            for zone, cb in self._state_callbacks.items():
+                cb({"zone": zone, "external_mute": False})
 
     def _handle_connection_change(self, available: bool) -> None:
         """Notify availability listeners."""
@@ -148,3 +165,12 @@ class BreatheAudioAPI:
                 f"Z{zone:02d}CONSR", zone=zone, wait_for_response=True
             )
         return None
+
+    async def query_all_zones(self, num_zones: int) -> None:
+        """Query status of all configured zones with inter-command stagger."""
+        for zone in range(1, min(num_zones, MAX_ZONE) + 1):
+            try:
+                await self.query_zone_status(zone)
+            except Exception as err:
+                _LOGGER.debug("Error polling zone %d: %s", zone, err)
+            await asyncio.sleep(INTER_COMMAND_DELAY)

@@ -29,6 +29,7 @@ from .const import (
     DOMAIN,
     SOURCES,
     MAX_ATTENUATION,
+    VERIFY_DELAY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -191,62 +192,76 @@ class BreatheAudioZone(MediaPlayerEntity):
         self._state = self._coordinator.get_zone_state(self._zone)
         self.async_write_ha_state()
 
-    # Command methods - Optimistic UI Updates for instant response
+    # Command methods - Optimistic UI Updates + post-command verification
+
+    def _schedule_verify(self) -> None:
+        """Schedule a delayed verification query to confirm device state."""
+        async def _verify() -> None:
+            await asyncio.sleep(VERIFY_DELAY)
+            await self._coordinator.async_refresh_zone(self._zone)
+
+        self.hass.async_create_task(_verify())
 
     async def async_turn_on(self) -> None:
         """Turn the zone on."""
         # Optimistic update: Show ON immediately
         self._state["power"] = True
         self.async_write_ha_state()
-        
+
         await self._api.zone_power_on(self._zone)
         # Restore saved volume if available (small delay for amp)
         if self._saved_volume is not None:
             await asyncio.sleep(0.1)
             await self._api.set_volume(self._zone, self._saved_volume)
+        self._schedule_verify()
 
     async def async_turn_off(self) -> None:
         """Turn the zone off."""
         # Optimistic update: Show OFF immediately
         self._state["power"] = False
         self.async_write_ha_state()
-        
+
         # Save current volume before turning off
         current_vol = self._state.get("volume")
         if current_vol is not None:
             self._saved_volume = current_vol
         await self._api.zone_power_off(self._zone)
+        self._schedule_verify()
 
     async def async_set_volume_level(self, volume: float) -> None:
         """Set volume level (0.0 to 1.0)."""
         # Invert: 1.0 -> 0 (-dB), 0.0 -> 78 (-dB)
         vol_int = int(MAX_ATTENUATION - (volume * MAX_ATTENUATION))
         vol_int = max(0, min(MAX_ATTENUATION, vol_int))
-        
+
         # Optimistic update
         self._state["volume"] = vol_int
         self.async_write_ha_state()
-        
+
         await self._api.set_volume(self._zone, vol_int)
+        self._schedule_verify()
 
     async def async_volume_up(self) -> None:
         """Volume up."""
         await self._api.volume_up(self._zone)
+        self._schedule_verify()
 
     async def async_volume_down(self) -> None:
         """Volume down."""
         await self._api.volume_down(self._zone)
+        self._schedule_verify()
 
     async def async_mute_volume(self, mute: bool) -> None:
         """Mute or unmute."""
         # Optimistic update
         self._state["mute"] = mute
         self.async_write_ha_state()
-        
+
         if mute:
             await self._api.mute_on(self._zone)
         else:
             await self._api.mute_off(self._zone)
+        self._schedule_verify()
 
     async def async_select_source(self, source: str) -> None:
         """Select input source."""
@@ -267,6 +282,7 @@ class BreatheAudioZone(MediaPlayerEntity):
 
         if source_num:
             await self._api.set_source(self._zone, source_num)
+            self._schedule_verify()
 
     # Service methods for tone controls
 

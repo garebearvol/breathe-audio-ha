@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import logging
 import random
 import re
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 import serial
@@ -18,6 +19,7 @@ try:
         BYTESIZE,
         COMMAND_TERMINATOR,
         COMMAND_TIMEOUT,
+        INTER_COMMAND_DELAY,
         PARITY,
         RESPONSE_PREFIX,
         STOPBITS,
@@ -29,6 +31,7 @@ except ImportError:  # pragma: no cover - standalone script fallback
         BYTESIZE,
         COMMAND_TERMINATOR,
         COMMAND_TIMEOUT,
+        INTER_COMMAND_DELAY,
         PARITY,
         RESPONSE_PREFIX,
         STOPBITS,
@@ -72,6 +75,20 @@ class SerialMessageParser:
         if "##" in text:
             text = text.replace("##", "#")
 
+        # Handle error response
+        if text == "#?" or text == "?":
+            _LOGGER.warning("Device returned error response: %s", message)
+            return None
+
+        # Handle broadcast responses
+        upper = text.upper()
+        if upper in ("#ALLOFF", "ALLOFF"):
+            return {"broadcast": "alloff"}
+        if upper in ("#EXTMON", "EXTMON"):
+            return {"broadcast": "extmon"}
+        if upper in ("#EXTMOFF", "EXTMOFF"):
+            return {"broadcast": "extmoff"}
+
         if text.startswith(RESPONSE_PREFIX):
             text = text[len(RESPONSE_PREFIX) :]
 
@@ -103,17 +120,32 @@ class SerialMessageParser:
                 state["power"] = part[3:] == "ON"
             elif part.startswith("VOL"):
                 vol_str = part[3:]
-                if vol_str.startswith(("+", "-")):
-                    vol_str = vol_str[1:]
-                try:
-                    state["volume"] = int(vol_str)
-                except ValueError:
-                    pass
+                # Handle special volume values
+                if vol_str == "MT":
+                    state["mute"] = True
+                elif vol_str == "XM":
+                    state["external_mute"] = True
+                else:
+                    # Handle VOL-yy format (negative dB attenuation)
+                    if vol_str.startswith("-"):
+                        vol_str = vol_str[1:]
+                    elif vol_str.startswith("+"):
+                        vol_str = vol_str[1:]
+                    try:
+                        state["volume"] = int(vol_str)
+                    except ValueError:
+                        pass
             elif part.startswith("MUT"):
                 state["mute"] = part[3:] == "ON"
             elif part.startswith("SRC"):
                 try:
                     state["source"] = int(part[3:])
+                except ValueError:
+                    pass
+            elif part.startswith("GRP"):
+                # GRP0 = grouped, GRP1 = ungrouped (per manual)
+                try:
+                    state["group"] = int(part[3:])
                 except ValueError:
                     pass
             elif part.startswith("BAS"):
@@ -131,6 +163,11 @@ class SerialMessageParser:
                     state["balance"] = int(part[3:].replace("+", ""))
                 except ValueError:
                     pass
+            elif len(part) == 1 and part == "P":
+                # Standalone "P" token — party mode field follows as next chars
+                pass
+            elif part.startswith("P") and part[1:] in ("MST", "SLV", "OFF"):
+                state["party_mode"] = part[1:]
 
         return state or None
 
@@ -199,6 +236,7 @@ class SerialConnectionManager:
         self._last_commanded_zone: Optional[int] = None
         self._available = False
         self._initial_connect_event = asyncio.Event()
+        self._last_command_time: float = 0.0
 
     @property
     def available(self) -> bool:
@@ -254,6 +292,12 @@ class SerialConnectionManager:
                 _LOGGER.warning("Serial protocol missing; dropping command %s", command)
                 return None
 
+            # Enforce inter-command delay per BA-6640 manual (50ms minimum)
+            now = time.monotonic()
+            elapsed = now - self._last_command_time
+            if elapsed < INTER_COMMAND_DELAY:
+                await asyncio.sleep(INTER_COMMAND_DELAY - elapsed)
+
             response_future: Optional[asyncio.Future] = None
             if wait_for_response:
                 response_future = asyncio.get_running_loop().create_future()
@@ -261,6 +305,7 @@ class SerialConnectionManager:
 
             payload = f"{command}{COMMAND_TERMINATOR}".encode("ascii")
             self._protocol.write(payload)
+            self._last_command_time = time.monotonic()
 
             if response_future is None:
                 return None
@@ -277,6 +322,10 @@ class SerialConnectionManager:
             state = self._parser.parse_state(frame, self._last_commanded_zone)
             if not state:
                 _LOGGER.debug("Ignoring unparsed frame: %s", frame)
+                continue
+            # Broadcast responses are dispatched but don't resolve per-zone waiters
+            if "broadcast" in state:
+                self._on_state(state)
                 continue
             self._on_state(state)
             if self._response_waiter and not self._response_waiter.done():

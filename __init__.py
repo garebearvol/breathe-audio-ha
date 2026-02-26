@@ -1,20 +1,24 @@
 """The Breathe Audio Elevate 6.6 integration."""
 
 import asyncio
+from datetime import timedelta
 import logging
 from typing import Any, Callable, Dict, List
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.event import async_track_time_interval
 
 from .breathe_audio import BreatheAudioAPI
 from .const import (
+    CONF_POLLING_INTERVAL,
     CONF_SERIAL_PORT,
     CONF_ZONES,
     DEFAULT_NAME,
+    DEFAULT_POLLING_INTERVAL,
     DEFAULT_ZONES,
     DOMAIN,
 )
@@ -27,8 +31,14 @@ PLATFORMS: List[Platform] = [Platform.MEDIA_PLAYER]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Breathe Audio from a config entry."""
     serial_port = entry.data[CONF_SERIAL_PORT]
-    zones = entry.data.get(CONF_ZONES, DEFAULT_ZONES)
+    zones = entry.options.get(
+        CONF_ZONES, entry.data.get(CONF_ZONES, DEFAULT_ZONES)
+    )
     name = entry.data.get(CONF_NAME, DEFAULT_NAME)
+    polling_interval = entry.options.get(
+        CONF_POLLING_INTERVAL,
+        entry.data.get(CONF_POLLING_INTERVAL, DEFAULT_POLLING_INTERVAL),
+    )
 
     # Create API instance
     api = BreatheAudioAPI(serial_port)
@@ -39,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(f"Failed to connect to {serial_port}")
 
     # Create coordinator/data manager
-    coordinator = BreatheAudioData(hass, api, entry, zones)
+    coordinator = BreatheAudioData(hass, api, entry, zones, polling_interval)
 
     # Store in hass data
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -100,15 +110,18 @@ class BreatheAudioData:
         api: BreatheAudioAPI,
         entry: ConfigEntry,
         zones: int,
+        polling_interval: int = DEFAULT_POLLING_INTERVAL,
     ) -> None:
         """Initialize the data manager."""
         self.hass = hass
         self.api = api
         self.entry = entry
         self.zones = zones
+        self._polling_interval = polling_interval
         self._zone_data: Dict[int, Dict[str, Any]] = {}
         self._listeners: Dict[int, List[Callable[[], None]]] = {}
         self._available = api.connected
+        self._polling_unsub: CALLBACK_TYPE | None = None
 
     @property
     def zone_data(self) -> Dict[int, Dict[str, Any]]:
@@ -156,7 +169,7 @@ class BreatheAudioData:
             self.hass.add_job(self._notify_listeners, zone)
 
     async def async_start(self) -> None:
-        """Start subscriptions and initial refresh."""
+        """Start subscriptions, initial refresh, and periodic polling."""
         # Register callbacks for async feedback
         for zone in range(1, self.zones + 1):
             self.api.register_state_callback(
@@ -169,12 +182,35 @@ class BreatheAudioData:
             await self.async_refresh_zone(zone)
             await asyncio.sleep(0.1)
 
+        # Start periodic polling
+        self._polling_unsub = async_track_time_interval(
+            self.hass,
+            self._async_poll_all_zones,
+            timedelta(seconds=self._polling_interval),
+        )
+        _LOGGER.info(
+            "Periodic polling started (interval: %ds)", self._polling_interval
+        )
+
     async def async_stop(self) -> None:
-        """Stop subscriptions."""
+        """Stop subscriptions and polling."""
+        # Cancel polling
+        if self._polling_unsub:
+            self._polling_unsub()
+            self._polling_unsub = None
+
         # Unregister callbacks
         for zone in range(1, self.zones + 1):
             self.api.unregister_state_callback(zone)
         self.api.unregister_connection_callback(self._handle_connection_update)
+
+    async def _async_poll_all_zones(self, _now=None) -> None:
+        """Poll all zones for current state (called by timer)."""
+        if not self._available:
+            _LOGGER.debug("Skipping poll — device not available")
+            return
+        _LOGGER.debug("Polling all %d zones", self.zones)
+        await self.api.query_all_zones(self.zones)
 
     async def async_refresh_zone(self, zone: int) -> None:
         """Refresh a single zone."""

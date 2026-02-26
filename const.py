@@ -36,6 +36,10 @@ MAX_ZONE: Final = 12
 COMMAND_TIMEOUT: Final = 2.0
 CONNECTION_RETRY_INTERVAL: Final = 10
 
+# Protocol timing
+INTER_COMMAND_DELAY: Final = 0.05  # 50ms between commands per BA-6640 manual
+VERIFY_DELAY: Final = 0.3  # 300ms delay before post-command verification query
+
 # Entity attributes
 ATTR_ZONE: Final = "zone"
 ATTR_SOURCE: Final = "source"
